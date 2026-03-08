@@ -1,48 +1,118 @@
-<img src="app/src/main/ic_launcher-playstore.png" alt="raymob icon" width="256" height="256">
+# Demon FPS 🔥
 
-# raymob [![Targeting raylib 5.5+](https://img.shields.io/badge/raylib-5.5+-3DDC84)](https://raylib.com) [![Supported Platforms](https://img.shields.io/badge/Platform-Android-3DDC84)](https://developer.android.com/) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![License](https://img.shields.io/badge/license-zlib%2Flibpng-blue.svg)](LICENSE)
+A first-person shooter Android game built with **raylib** and **raymob**. Fight demons in a raycasted 3D maze!
 
-raymob is a simple implementation of [raylib](https://www.raylib.com/) for Android.
+![Demon FPS](app/src/main/ic_launcher-playstore.png)
 
-## Prerequisites
+## Features 🎮
 
-**You will need SDK API 34 and NDK r23 (or higher, compatible with CMake 3.30.3).**
+- **Raycasting 3D Engine** - Classic Wolfenstein-style rendering
+- **Touch Controls** - Virtual joystick + drag-to-look camera
+- **Combat System** - Shoot demons, reload, manage ammo
+- **Multiple Enemy Types** - Imp, Demon, Caco, Baron (each with different colors)
+- **Particle Effects** - Muzzle flash, blood splatter, death explosions
+- **Pause Menu** - Adjustable sensitivity and volume sliders
+- **Main Menu** - Play, Settings, Exit
 
-If you already have this version of SDK and NDK without having Android Studio, you should still be able to compile the project using `gradlew.bat` for Windows or `gradlew` for Linux or MacOS.
+## Controls 📱
 
-## How to Use?
+| Control | Action |
+|---------|--------|
+| **Left Joystick** | Move (WASD style) |
+| **Drag Right Side** | Look around |
+| **FIRE Button** | Shoot |
+| **R Button** | Reload |
+| **II Button** | Pause |
 
-1. Clone the repository and automatically initialize and update all submodules:
-   ```
-   git clone --recurse-submodules https://github.com/Bigfoot71/raymob.git
-   ```
-2. Open the `gradle.properties` file and fill in the necessary values for your application, such as the app name, package name, version, etc.
-3. That's it! You can start coding your raylib app in the `app/src/main/cpp` directory!
+## Building from Source 🛠️
 
-> [!NOTE]
-> Do not modify the instances of `com.raylib.raymob` and `raymob` as they will be automatically replaced during compilation with the information provided in `gradle.properties`.
+### Prerequisites
 
-## Compatibility
+- Android SDK API 34
+- Android NDK r26+ (compatible with CMake 3.30.3)
+- Java 17
 
-By default, the raymob template targets APIs 24 to 34, which corresponds from Android 7.0 to Android 13 (_so 96% of devices according to [apilevels.com](https://apilevels.com/)_).
+### Setup
 
-This project is fully C/C++ compatible for the logical part with raylib and you can also customize the Java part to your wishes.
+1. **Clone the repository with submodules:**
+```bash
+git clone --recurse-submodules https://github.com/Sanjis-Android-Playground/c_game.git
+cd c_game
+```
 
-## Additional Features
+2. **Set environment variables:**
+```bash
+export ANDROID_HOME=/path/to/android-sdk
+export JAVA_HOME=/path/to/java-17
+```
 
-In this project, you have access to the header file [raymob.h](app/src/main/cpp/deps/raymob/raymob.h), which provides functions for controlling sensors, vibration, and the Android soft keyboard, as well as lower-level functions such as obtaining the `android_app`, manipulating the cache, managing resources, and calling Java functions from your native code.
+3. **Build the APK:**
+```bash
+./gradlew assembleDebug
+```
 
-## Useful Links
+The APK will be at:
+```
+app/build/outputs/apk/debug/app-debug.apk
+```
 
-- [AdMob Integration in raymob](https://gist.github.com/Bigfoot71/b3a658458ece93ddcb06f4c78f85076a): Gist demonstrating the integration of AdMob in raymob.
+### Build for Release
 
-## Contributions
+```bash
+./gradlew assembleRelease
+```
 
-If you believe that your repositories or gists related to raymob can be beneficial to others, please feel free to reach out to me or open a pull request to have them added here.
-I welcome contributions and collaborations to enhance the raymob project and make it more valuable for the community.
+## Project Structure 📁
 
-You can also contribute to the project by reporting issues, suggesting improvements, or helping to document the project. Your input is highly appreciated!
+```
+c_game/
+├── app/src/main/cpp/
+│   ├── main.c           # Game code (raycasting, AI, controls)
+│   ├── CMakeLists.txt   # Build config
+│   └── deps/
+│       ├── raylib/      # raylib submodule
+│       └── raymob/      # raymob submodule
+├── app/src/main/java/   # Java wrapper
+├── app/build.gradle     # App build config
+├── gradle.properties    # App name, version, etc.
+└── README.md           # This file
+```
 
-### Support
+## Game Mechanics 🎯
 
-If you have any questions or encounter problems when using this implementation, please do not hesitate to ask for help by submitting an issue on this repository, this may help other users.
+### Player
+- **Health:** 100 HP
+- **Ammo:** 30 rounds (reload with R button)
+- **Score:** Kill demons to increase score
+
+### Enemies
+| Type | Color | Speed |
+|------|-------|-------|
+| Imp | Red | Slow |
+| Demon | Orange | Medium |
+| Caco | Purple | Fast |
+| Baron | Maroon | Very Fast |
+
+### Map
+16x16 tile-based maze with walls. Demons spawn randomly and chase the player.
+
+## Customization 🎨
+
+Edit `app/src/main/cpp/main.c` to modify:
+- `MAP_SIZE` - Maze size
+- `MOVE_SPEED` - Player speed
+- `MAX_DEMONS` - Max enemies
+- `map[][]` - Level layout (1=wall, 0=empty)
+
+## Credits 🙏
+
+- Built with [raylib](https://raylib.com) - Simple and easy-to-use game library
+- Using [raymob](https://github.com/Bigfoot71/raymob) - raylib for Android
+
+## License 📄
+
+MIT License - Feel free to use, modify, and distribute!
+
+---
+
+**Made with ❤️ by AI (Esdeath) for Sanji**
