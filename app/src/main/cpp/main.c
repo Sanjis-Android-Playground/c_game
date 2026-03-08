@@ -1,6 +1,6 @@
 /*******************************************************************************************
 *
-*   Demon FPS - Fully Fixed Version
+*   Demon FPS - Physics-Enhanced Version
 *
 ********************************************************************************************/
 
@@ -14,10 +14,9 @@
 //------------------------------------------------------------------------------------
 #define MAP_SIZE 16
 #define FOV 60.0f
-#define MOVE_SPEED 3.0f
-#define ROT_SPEED 2.0f
-#define MAX_DEMONS 10
+#define MAX_DEMONS 5          // Reduced from 10
 #define MAX_PARTICLES 30
+#define SPAWN_INTERVAL 8.0f   // Seconds between spawns
 
 typedef enum { MENU, PLAYING, PAUSED, GAME_OVER } GameState;
 
@@ -26,6 +25,7 @@ typedef enum { MENU, PLAYING, PAUSED, GAME_OVER } GameState;
 //------------------------------------------------------------------------------------
 typedef struct {
     float x, y;
+    float vx, vy;          // Physics velocity
     float angle;
     int health;
     int ammo;
@@ -34,12 +34,14 @@ typedef struct {
 
 typedef struct {
     float x, y;
+    float vx, vy;          // Physics velocity
     float hp;
     float speed;
     int type;
     bool alive;
     float distance;
     float angle;
+    float spawnX, spawnY;  // Track spawn location
 } Demon;
 
 typedef struct {
@@ -70,12 +72,13 @@ typedef struct {
 //------------------------------------------------------------------------------------
 // Global Variables
 //------------------------------------------------------------------------------------
-Player player = { 2.5f, 2.5f, 0.0f, 100, 30, 0 };
+Player player = { 2.5f, 2.5f, 0.0f, 0.0f, 0.0f, 100, 30, 0 };
 Demon demons[MAX_DEMONS];
 Particle particles[MAX_PARTICLES];
 int demonCount = 0;
 int particleCount = 0;
 float lastShot = 0;
+float lastSpawn = 0;
 GameState gameState = MENU;
 float lookSensitivity = 1.0f;
 float masterVolume = 0.7f;
@@ -85,6 +88,13 @@ bool cameraActive = false;
 int cameraTouchId = -1;
 Vector2 cameraStartPos = {0};
 float cameraStartAngle = 0;
+
+// Physics constants
+const float ACCEL = 15.0f;        // Acceleration
+const float FRICTION = 8.0f;      // Friction/decay
+const float MAX_SPEED = 4.0f;     // Max movement speed
+const float DEMON_ACCEL = 8.0f;   // Demon acceleration
+const float DEMON_FRICTION = 4.0f;
 
 // UI Elements
 Joystick moveJoystick = { {0}, 140, {0}, false, -1 };
@@ -98,7 +108,7 @@ Button menuBtn = { {0}, "MENU", false, false, GRAY, (Color){100, 100, 100, 255},
 float sensSliderValue = 0.5f;
 float volSliderValue = 0.7f;
 
-// FIXED MAP - Proper walls
+// FIXED MAP - Valid spawn locations marked
 int map[MAP_SIZE][MAP_SIZE] = {
     {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
     {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
@@ -118,6 +128,14 @@ int map[MAP_SIZE][MAP_SIZE] = {
     {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
 };
 
+// Valid spawn points (empty tiles away from player start)
+Vector2 spawnPoints[] = {
+    {2.5f, 2.5f}, {13.5f, 2.5f}, {2.5f, 13.5f}, {13.5f, 13.5f},
+    {5.5f, 5.5f}, {10.5f, 5.5f}, {5.5f, 10.5f}, {10.5f, 10.5f},
+    {3.5f, 8.5f}, {12.5f, 8.5f}, {8.5f, 3.5f}, {8.5f, 12.5f}
+};
+int numSpawnPoints = 12;
+
 Color demonColors[4] = { RED, ORANGE, PURPLE, MAROON };
 const char* demonNames[4] = { "IMP", "DEMON", "CACO", "BARON" };
 
@@ -129,10 +147,26 @@ float Distance(float x1, float y1, float x2, float y2) {
 }
 
 bool CheckWallCollision(float x, float y) {
-    int mapX = (int)x;
-    int mapY = (int)y;
-    if (mapX < 0 || mapX >= MAP_SIZE || mapY < 0 || mapY >= MAP_SIZE) return true;
-    return map[mapY][mapX] == 1;
+    // Check multiple points for better collision
+    float offsets[5][2] = {{0,0}, {-0.3f,0}, {0.3f,0}, {0,-0.3f}, {0,0.3f}};
+    for (int i = 0; i < 5; i++) {
+        int mapX = (int)(x + offsets[i][0]);
+        int mapY = (int)(y + offsets[i][1]);
+        if (mapX < 0 || mapX >= MAP_SIZE || mapY < 0 || mapY >= MAP_SIZE) return true;
+        if (map[mapY][mapX] == 1) return true;
+    }
+    return false;
+}
+
+bool IsValidSpawnPoint(float x, float y) {
+    if (CheckWallCollision(x, y)) return false;
+    if (Distance(x, y, player.x, player.y) < 6.0f) return false; // Not too close to player
+    
+    // Check not too close to other demons
+    for (int i = 0; i < demonCount; i++) {
+        if (demons[i].alive && Distance(x, y, demons[i].x, demons[i].y) < 2.0f) return false;
+    }
+    return true;
 }
 
 void SpawnParticle(float x, float y, Color color) {
@@ -158,22 +192,48 @@ void UpdateParticles(float dt) {
 void SpawnDemon(void) {
     if (demonCount >= MAX_DEMONS) return;
     
-    float x, y;
-    int attempts = 0;
-    do {
-        x = 2.0f + (rand() % 12);
-        y = 2.0f + (rand() % 12);
-        attempts++;
-    } while ((CheckWallCollision(x, y) || Distance(x, y, player.x, player.y) < 4.0f) && attempts < 100);
+    // Try predefined spawn points first
+    Vector2 validSpawns[12];
+    int validCount = 0;
     
-    if (attempts < 100) {
-        demons[demonCount].x = x + 0.5f;
-        demons[demonCount].y = y + 0.5f;
-        demons[demonCount].hp = 100;
-        demons[demonCount].speed = 0.8f + (rand() % 60) / 100.0f;
-        demons[demonCount].type = rand() % 4;
-        demons[demonCount].alive = true;
-        demonCount++;
+    for (int i = 0; i < numSpawnPoints; i++) {
+        if (IsValidSpawnPoint(spawnPoints[i].x, spawnPoints[i].y)) {
+            validSpawns[validCount++] = spawnPoints[i];
+        }
+    }
+    
+    // If no valid predefined points, find random valid spot
+    float x, y;
+    if (validCount > 0) {
+        int idx = rand() % validCount;
+        x = validSpawns[idx].x;
+        y = validSpawns[idx].y;
+    } else {
+        // Fallback: random search
+        int attempts = 0;
+        do {
+            x = 2.0f + (rand() % 12);
+            y = 2.0f + (rand() % 12);
+            attempts++;
+        } while (!IsValidSpawnPoint(x, y) && attempts < 100);
+        if (attempts >= 100) return; // Couldn't find valid spot
+    }
+    
+    demons[demonCount].x = x;
+    demons[demonCount].y = y;
+    demons[demonCount].vx = 0;
+    demons[demonCount].vy = 0;
+    demons[demonCount].hp = 100;
+    demons[demonCount].speed = 2.0f + (rand() % 100) / 100.0f;
+    demons[demonCount].type = rand() % 4;
+    demons[demonCount].alive = true;
+    demons[demonCount].spawnX = x;
+    demons[demonCount].spawnY = y;
+    demonCount++;
+    
+    // Spawn effect
+    for (int p = 0; p < 5; p++) {
+        SpawnParticle(x, y, PURPLE);
     }
 }
 
@@ -271,7 +331,6 @@ void UpdateJoystick(Joystick* js, float* outX, float* outY) {
     *outX = 0; *outY = 0;
     int touchCount = GetTouchPointCount();
     
-    // Check if active touch is still valid
     if (js->active && js->touchId >= touchCount) {
         js->active = false;
         js->touchId = -1;
@@ -282,7 +341,6 @@ void UpdateJoystick(Joystick* js, float* outX, float* outY) {
         Vector2 touch = GetTouchPosition(i);
         if (touch.x == 0 && touch.y == 0) continue;
         
-        // Start joystick on left side
         if (!js->active && touch.x < GetScreenWidth() * 0.4f) {
             float dist = Distance(touch.x, touch.y, js->pos.x, js->pos.y);
             if (dist < js->radius * 2.0f) {
@@ -319,7 +377,6 @@ void UpdateButton(Button* btn) {
     btn->pressed = false;
     int touchCount = GetTouchPointCount();
     
-    // Check existing touch
     if (btn->touchId >= 0 && btn->touchId < touchCount) {
         Vector2 touch = GetTouchPosition(btn->touchId);
         if (touch.x != 0 || touch.y != 0) {
@@ -333,7 +390,6 @@ void UpdateButton(Button* btn) {
         }
     }
     
-    // Find new touch
     if (!btn->pressed) {
         for (int i = 0; i < touchCount; i++) {
             Vector2 touch = GetTouchPosition(i);
@@ -356,7 +412,6 @@ void UpdateCameraControl(float dt) {
     int touchCount = GetTouchPointCount();
     int screenW = GetScreenWidth();
     
-    // Check if camera touch still valid
     if (cameraActive) {
         bool valid = false;
         for (int i = 0; i < touchCount; i++) {
@@ -376,15 +431,11 @@ void UpdateCameraControl(float dt) {
         Vector2 touch = GetTouchPosition(i);
         if (touch.x == 0 && touch.y == 0) continue;
         
-        // Skip joystick touch
         if (moveJoystick.active && moveJoystick.touchId == i) continue;
-        
-        // Skip buttons
         if (IsPointInRect(touch, fireBtn.rect)) continue;
         if (IsPointInRect(touch, reloadBtn.rect)) continue;
         if (IsPointInRect(touch, pauseBtn.rect)) continue;
         
-        // Right side for camera
         if (!cameraActive && touch.x > screenW * 0.35f) {
             cameraActive = true;
             cameraTouchId = i;
@@ -435,12 +486,11 @@ void Shoot(void) {
 }
 
 //------------------------------------------------------------------------------------
-// Game Update - FIXED MOVEMENT AND AI
+// Game Update - PHYSICS-BASED MOVEMENT
 //------------------------------------------------------------------------------------
 void UpdateGame(float dt) {
     if (gameState != PLAYING) return;
     
-    // Update buttons
     UpdateButton(&fireBtn);
     UpdateButton(&reloadBtn);
     UpdateButton(&pauseBtn);
@@ -449,37 +499,59 @@ void UpdateGame(float dt) {
     if (ButtonJustPressed(&reloadBtn) && player.ammo < 30) player.ammo = 30;
     if (ButtonJustPressed(&pauseBtn)) { gameState = PAUSED; return; }
     
-    // Movement joystick - SMOOTH
+    // Get joystick input
     float joyX, joyY;
     UpdateJoystick(&moveJoystick, &joyX, &joyY);
     
-    // Apply movement with collision - CHECK BOTH AXES SEPARATELY
-    float moveStep = MOVE_SPEED * dt;
+    // PHYSICS: Apply acceleration based on input
+    player.vx += joyX * ACCEL * dt;
+    player.vy -= joyY * ACCEL * dt;  // Invert Y
     
-    // X movement
-    float newX = player.x + joyX * moveStep;
-    if (!CheckWallCollision(newX + (joyX > 0 ? 0.2f : -0.2f), player.y)) {
-        player.x = newX;
-    }
-    
-    // Y movement  
-    float newY = player.y - joyY * moveStep;
-    if (!CheckWallCollision(player.x, newY + (-joyY > 0 ? 0.2f : -0.2f))) {
-        player.y = newY;
-    }
-    
-    // Keyboard fallback
+    // Keyboard input also uses physics
     if (IsKeyDown(KEY_W)) {
-        float nx = player.x + cosf(player.angle * DEG2RAD) * moveStep;
-        float ny = player.y + sinf(player.angle * DEG2RAD) * moveStep;
-        if (!CheckWallCollision(nx, player.y)) player.x = nx;
-        if (!CheckWallCollision(player.x, ny)) player.y = ny;
+        player.vx += cosf(player.angle * DEG2RAD) * ACCEL * dt;
+        player.vy += sinf(player.angle * DEG2RAD) * ACCEL * dt;
     }
     if (IsKeyDown(KEY_S)) {
-        float nx = player.x - cosf(player.angle * DEG2RAD) * moveStep;
-        float ny = player.y - sinf(player.angle * DEG2RAD) * moveStep;
-        if (!CheckWallCollision(nx, player.y)) player.x = nx;
-        if (!CheckWallCollision(player.x, ny)) player.y = ny;
+        player.vx -= cosf(player.angle * DEG2RAD) * ACCEL * dt;
+        player.vy -= sinf(player.angle * DEG2RAD) * ACCEL * dt;
+    }
+    if (IsKeyDown(KEY_A)) {
+        player.vx += cosf((player.angle - 90) * DEG2RAD) * ACCEL * dt;
+        player.vy += sinf((player.angle - 90) * DEG2RAD) * ACCEL * dt;
+    }
+    if (IsKeyDown(KEY_D)) {
+        player.vx += cosf((player.angle + 90) * DEG2RAD) * ACCEL * dt;
+        player.vy += sinf((player.angle + 90) * DEG2RAD) * ACCEL * dt;
+    }
+    
+    // PHYSICS: Apply friction (smooth deceleration)
+    player.vx *= (1.0f - FRICTION * dt);
+    player.vy *= (1.0f - FRICTION * dt);
+    
+    // Clamp max speed
+    float speed = sqrtf(player.vx * player.vx + player.vy * player.vy);
+    if (speed > MAX_SPEED) {
+        player.vx = (player.vx / speed) * MAX_SPEED;
+        player.vy = (player.vy / speed) * MAX_SPEED;
+    }
+    
+    // Apply velocity with collision detection
+    float newX = player.x + player.vx * dt;
+    float newY = player.y + player.vy * dt;
+    
+    // X collision - slide along wall
+    if (!CheckWallCollision(newX, player.y)) {
+        player.x = newX;
+    } else {
+        player.vx = -player.vx * 0.3f;  // Bounce slightly
+    }
+    
+    // Y collision - slide along wall
+    if (!CheckWallCollision(player.x, newY)) {
+        player.y = newY;
+    } else {
+        player.vy = -player.vy * 0.3f;  // Bounce slightly
     }
     
     // Camera
@@ -487,12 +559,11 @@ void UpdateGame(float dt) {
     if (IsKeyDown(KEY_LEFT)) player.angle -= 100.0f * dt * lookSensitivity;
     if (IsKeyDown(KEY_RIGHT)) player.angle += 100.0f * dt * lookSensitivity;
     
-    // Keyboard shoot/reload/pause
     if (IsKeyPressed(KEY_SPACE)) Shoot();
     if (IsKeyPressed(KEY_R) && player.ammo < 30) player.ammo = 30;
     if (IsKeyPressed(KEY_ESCAPE)) gameState = PAUSED;
     
-    // FIXED DEMON AI - Better collision and movement
+    // DEMON PHYSICS
     for (int i = 0; i < demonCount; i++) {
         if (!demons[i].alive) continue;
         
@@ -504,30 +575,50 @@ void UpdateGame(float dt) {
         demons[i].angle = atan2f(dy, dx) * RAD2DEG;
         
         if (dist > 0.8f) {
-            // Move toward player with collision
-            float moveX = (dx / dist) * demons[i].speed * dt;
-            float moveY = (dy / dist) * demons[i].speed * dt;
+            // Accelerate toward player
+            float ax = (dx / dist) * DEMON_ACCEL;
+            float ay = (dy / dist) * DEMON_ACCEL;
             
-            float newDemonX = demons[i].x + moveX;
-            float newDemonY = demons[i].y + moveY;
+            demons[i].vx += ax * dt;
+            demons[i].vy += ay * dt;
             
-            // Check collision before moving
-            if (!CheckWallCollision(newDemonX, demons[i].y)) {
-                demons[i].x = newDemonX;
+            // Apply friction
+            demons[i].vx *= (1.0f - DEMON_FRICTION * dt);
+            demons[i].vy *= (1.0f - DEMON_FRICTION * dt);
+            
+            // Clamp speed
+            float dSpeed = sqrtf(demons[i].vx * demons[i].vx + demons[i].vy * demons[i].vy);
+            if (dSpeed > demons[i].speed) {
+                demons[i].vx = (demons[i].vx / dSpeed) * demons[i].speed;
+                demons[i].vy = (demons[i].vy / dSpeed) * demons[i].speed;
             }
-            if (!CheckWallCollision(demons[i].x, newDemonY)) {
-                demons[i].y = newDemonY;
+            
+            // Apply with collision
+            float newDX = demons[i].x + demons[i].vx * dt;
+            float newDY = demons[i].y + demons[i].vy * dt;
+            
+            if (!CheckWallCollision(newDX, demons[i].y)) {
+                demons[i].x = newDX;
+            } else {
+                demons[i].vx = -demons[i].vx * 0.5f;
+            }
+            
+            if (!CheckWallCollision(demons[i].x, newDY)) {
+                demons[i].y = newDY;
+            } else {
+                demons[i].vy = -demons[i].vy * 0.5f;
             }
         } else {
-            // Attack player
+            // Attack
             player.health -= 1;
             if (player.health <= 0) gameState = GAME_OVER;
         }
     }
     
-    // Spawn demons
-    if (GetTime() > (float)(player.score * 2 + 5) && demonCount < MAX_DEMONS) {
+    // Spawn demons with timer (not score-based)
+    if (GetTime() - lastSpawn > SPAWN_INTERVAL && demonCount < MAX_DEMONS) {
         SpawnDemon();
+        lastSpawn = GetTime();
     }
     
     UpdateParticles(dt);
@@ -539,11 +630,17 @@ void ResetGame(void) {
     player.score = 0;
     player.x = 2.5f;
     player.y = 2.5f;
+    player.vx = 0;
+    player.vy = 0;
     player.angle = 0;
     demonCount = 0;
     particleCount = 0;
+    lastSpawn = GetTime();
     gameState = PLAYING;
-    for (int i = 0; i < 3; i++) SpawnDemon();
+    
+    // Spawn initial 2 demons
+    SpawnDemon();
+    SpawnDemon();
 }
 
 //------------------------------------------------------------------------------------
@@ -554,7 +651,6 @@ void DrawGame3D(void) {
     int screenH = GetScreenHeight();
     int numRays = screenW / 2;
     
-    // Raycasting with proper DDA
     for (int i = 0; i < numRays; i++) {
         float rayAngle = player.angle - FOV/2 + (FOV * i / numRays);
         float distance;
@@ -562,12 +658,10 @@ void DrawGame3D(void) {
         
         CastRay(rayAngle, &distance, &hitWall);
         
-        // Fix fisheye
         float correctedDist = distance * cosf((rayAngle - player.angle) * DEG2RAD);
         float wallHeight = (screenH / correctedDist) * 0.8f;
         int wallTop = (screenH - wallHeight) / 2;
         
-        // Better shading based on distance
         float shade = fmaxf(0.15f, 1.0f - correctedDist/12.0f);
         unsigned char bright = (unsigned char)(255 * shade);
         Color wallColor = { (unsigned char)(bright*0.6f), (unsigned char)(bright*0.4f), (unsigned char)(bright*0.4f), 255 };
@@ -577,7 +671,7 @@ void DrawGame3D(void) {
         DrawRectangle(i * 2, 0, 2, wallTop, (Color){ 40, 8, 8, 255 });
     }
     
-    // Sort demons by distance (painters algorithm)
+    // Sort demons
     for (int i = 0; i < demonCount - 1; i++) {
         for (int j = i + 1; j < demonCount; j++) {
             if (demons[j].distance > demons[i].distance) {
@@ -588,7 +682,6 @@ void DrawGame3D(void) {
         }
     }
     
-    // Draw demons
     for (int i = 0; i < demonCount; i++) {
         if (!demons[i].alive) continue;
         
@@ -599,7 +692,7 @@ void DrawGame3D(void) {
         if (fabsf(angleDiff) < FOV/2 + 10) {
             float screenX = screenW/2 + (angleDiff / FOV) * screenW;
             float size = (screenH / demons[i].distance) * 0.5f;
-            if (size > 300) size = 300; // Cap size
+            if (size > 300) size = 300;
             
             float shade = fmaxf(0.3f, 1.0f - demons[i].distance/10.0f);
             Color demonColor = demonColors[demons[i].type];
@@ -609,14 +702,12 @@ void DrawGame3D(void) {
             
             DrawRectangle(screenX - size/2, screenH/2 - size/2, size, size, demonColor);
             
-            // Health bar
             DrawRectangle(screenX - size/2, screenH/2 - size/2 - 25, size, 12, DARKGRAY);
             DrawRectangle(screenX - size/2, screenH/2 - size/2 - 25, size * (demons[i].hp/100.0f), 12, GREEN);
             DrawText(demonNames[demons[i].type], screenX - 30, screenH/2 - size/2 - 50, 20, WHITE);
         }
     }
     
-    // Particles
     for (int i = 0; i < particleCount; i++) {
         float screenX = screenW/2 + (particles[i].pos.x - player.x) * 40;
         float screenY = screenH/2 + (particles[i].pos.y - player.y) * 40;
@@ -649,16 +740,13 @@ void DrawButton(Button* btn, int fontSize) {
 }
 
 void DrawGameUI(void) {
-    // Joystick
     DrawCircleV(moveJoystick.pos, moveJoystick.radius, (Color){ 255, 255, 255, 50 });
     DrawCircleV(moveJoystick.stickPos, moveJoystick.radius * 0.35f, (Color){ 255, 255, 255, 120 });
     
-    // Buttons
     DrawButton(&fireBtn, 32);
     DrawButton(&reloadBtn, 36);
     DrawButton(&pauseBtn, 36);
     
-    // HUD
     DrawText(TextFormat("♥ %d", player.health), 25, 25, 40, RED);
     DrawText(TextFormat("⌖ %d", player.ammo), GetScreenWidth() - 140, 25, 40, YELLOW);
     DrawText(TextFormat("KILLS: %d", player.score), 25, 75, 28, SKYBLUE);
@@ -689,21 +777,18 @@ void DrawPauseMenu(void) {
     
     DrawText("PAUSED", w/2 - 120, h/2 - 180, 60, WHITE);
     
-    // Sensitivity
-    DrawText("SENSITIVITY", w/2 - 120, h/2 - 80, 24, WHITE);
+    DrawText("LOOK SENSITIVITY", w/2 - 120, h/2 - 80, 24, WHITE);
     Rectangle sensRect = { w/2 - 200, h/2 - 40, 400, 25 };
     DrawRectangleRec(sensRect, DARKGRAY);
     DrawRectangleRec((Rectangle){ sensRect.x, sensRect.y, sensRect.width * sensSliderValue, sensRect.height }, BLUE);
     DrawCircle(sensRect.x + sensRect.width * sensSliderValue, sensRect.y + 12, 18, WHITE);
     
-    // Volume
     DrawText("VOLUME", w/2 - 70, h/2 + 10, 24, WHITE);
     Rectangle volRect = { w/2 - 200, h/2 + 45, 400, 25 };
     DrawRectangleRec(volRect, DARKGRAY);
     DrawRectangleRec((Rectangle){ volRect.x, volRect.y, volRect.width * volSliderValue, volRect.height }, GREEN);
     DrawCircle(volRect.x + volRect.width * volSliderValue, volRect.y + 12, 18, WHITE);
     
-    // Handle sliders
     int touchCount = GetTouchPointCount();
     for (int i = 0; i < touchCount; i++) {
         Vector2 touch = GetTouchPosition(i);
@@ -728,7 +813,6 @@ void DrawPauseMenu(void) {
         }
     }
     
-    // Buttons
     UpdateButton(&resumeBtn);
     UpdateButton(&menuBtn);
     DrawButton(&resumeBtn, 32);
