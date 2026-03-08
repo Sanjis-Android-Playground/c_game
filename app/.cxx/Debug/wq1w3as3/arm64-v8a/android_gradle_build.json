@@ -1,0 +1,67 @@
+{
+  "buildFiles": [
+    "/home/ubuntu/raymob/app/src/main/cpp/CMakeLists.txt",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/CMakeLists.txt",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/AddIfFlagCompiles.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/CompileDefinitions.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/CompilerFlags.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/EnumOption.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/GlfwImport.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/InstallConfigurations.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/JoinPaths.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/LibraryConfigurations.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/LibraryPathToLinkerFlags.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/PackConfigurations.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/ParseConfigHeader.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/PopulateConfigVariablesLocally.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/raylib-config-version.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/cmake/raylib-config.cmake",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/src/CMakeLists.txt",
+    "/home/ubuntu/raymob/app/src/main/cpp/deps/raymob/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/ubuntu/android-sdk/cmake/3.30.3/bin/ninja",
+      "-C",
+      "/home/ubuntu/raymob/app/.cxx/Debug/wq1w3as3/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/ubuntu/android-sdk/cmake/3.30.3/bin/ninja",
+    "-C",
+    "/home/ubuntu/raymob/app/.cxx/Debug/wq1w3as3/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "demonfps::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "demonfps",
+      "output": "/home/ubuntu/raymob/app/build/intermediates/cxx/Debug/wq1w3as3/obj/arm64-v8a/libdemonfps.so",
+      "runtimeFiles": []
+    },
+    "raylib::@6f9cc4bfba4938b061a0": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "raylib",
+      "output": "/home/ubuntu/raymob/app/.cxx/Debug/wq1w3as3/arm64-v8a/deps/raylib/raylib/libraylib.a"
+    },
+    "raymoblib::@71420b749f8138f26715": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "raymoblib",
+      "output": "/home/ubuntu/raymob/app/.cxx/Debug/wq1w3as3/arm64-v8a/deps/raymob/libraymoblib.a"
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/home/ubuntu/android-sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/home/ubuntu/android-sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [
+    "c"
+  ],
+  "cppFileExtensions": []
+}

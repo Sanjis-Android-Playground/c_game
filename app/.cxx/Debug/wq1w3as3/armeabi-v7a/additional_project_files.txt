@@ -1,0 +1,4 @@
+/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/src/raylib.h
+/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/src/rcamera.h
+/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/src/rlgl.h
+/home/ubuntu/raymob/app/src/main/cpp/deps/raylib/src/raymath.h
